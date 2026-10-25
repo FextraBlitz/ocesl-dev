@@ -19,11 +19,11 @@
         <!-- Title & status -->
         <header class="flex flex-col items-center gap-3 text-center">
           <div class="flex items-center gap-2">
-            <UBadge v-if="props.entry.dean_accepted" color="success" variant="subtle">
+            <UBadge v-if="deanAccepted" color="success" variant="subtle">
               <UIcon name="i-lucide-check-circle-2" class="size-3.5 mr-1" />
               Accepted by Dean
             </UBadge>
-            <UBadge v-else-if="props.entry.locked" color="neutral" variant="subtle">
+            <UBadge v-else-if="locked" color="neutral" variant="subtle">
               <UIcon name="i-lucide-lock" class="size-3.5 mr-1" />
               Locked
             </UBadge>
@@ -109,6 +109,47 @@
             </div>
           </section>
         </template>
+
+        <!-- Review controls: only Deans (of this unit) and OCESL admins see these.
+             Neither can edit the report, so status changes live here. -->
+        <template v-if="props.is_dean || isOceslAdmin">
+          <USeparator />
+          <section class="flex flex-col gap-3">
+            <div v-if="props.is_dean" class="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 flex items-center justify-between gap-4">
+              <div class="flex items-start gap-3">
+                <UIcon name="i-lucide-shield-check" class="size-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div class="space-y-0.5">
+                  <p class="text-sm font-semibold text-amber-600 dark:text-amber-400">Dean Review</p>
+                  <p class="text-xs text-neutral-500">Deans accept reports from their respective college.</p>
+                </div>
+              </div>
+              <UCheckbox
+                v-model="deanAccepted"
+                :disabled="savingField !== null"
+                label="Accepted by Dean"
+                color="primary"
+                @update:model-value="(val: boolean | 'indeterminate') => saveFlag('dean_accepted', val === true)"
+              />
+            </div>
+
+            <div v-if="isOceslAdmin" class="rounded-lg border border-default bg-elevated/40 p-4 flex items-center justify-between gap-4">
+              <div class="flex items-start gap-3">
+                <UIcon name="i-lucide-lock" class="size-5 text-muted mt-0.5 shrink-0" />
+                <div class="space-y-0.5">
+                  <p class="text-sm font-semibold">Admin Controls</p>
+                  <p class="text-xs text-neutral-500">Marking a report as complete prevents further edits by users.</p>
+                </div>
+              </div>
+              <UCheckbox
+                v-model="locked"
+                :disabled="savingField !== null"
+                label="Mark as Completed"
+                color="success"
+                @update:model-value="(val: boolean | 'indeterminate') => saveFlag('locked', val === true)"
+              />
+            </div>
+          </section>
+        </template>
       </article>
     </template>
 
@@ -136,9 +177,52 @@ const props = defineProps<{
   report_type: keyof typeof ReportCodeType
   unit_name: string
   entry: Entry
+  /** True when the logged-in user is the Dean of this report's unit. */
+  is_dean?: boolean
 }>()
 
-const emit = defineEmits<{ close: [] }>()
+// `changed` fires right after a Dean / admin toggle is saved (the modal stays
+// open), so the page behind it can refetch immediately.
+const emit = defineEmits<{ close: []; changed: [] }>()
+
+const toast = useToast()
+const { user_data } = useUserData()
+const { updateReport } = useUpdateReport()
+
+const isOceslAdmin = computed(() => user_data.value?.authority === 'OCESL')
+
+// Local copies, so the badge (and PDF status) update immediately after a
+// toggle without waiting for the parent to refetch.
+const deanAccepted = ref<boolean>(props.entry.dean_accepted ?? false)
+const locked = ref<boolean>(props.entry.locked ?? false)
+const savingField = ref<'dean_accepted' | 'locked' | null>(null)
+
+async function saveFlag(field: 'dean_accepted' | 'locked', value: boolean) {
+  const target = field === 'dean_accepted' ? deanAccepted : locked
+  savingField.value = field
+
+  try {
+    // Only this one column is sent, so a stale copy of the report can't
+    // overwrite anything someone else just edited.
+    await updateReport({ id: props.entry.id, [field]: value })
+    emit('changed')
+    toast.add({
+      title: field === 'dean_accepted'
+        ? (value ? 'Report accepted' : 'Acceptance removed')
+        : (value ? 'Report marked as completed' : 'Report unlocked'),
+      color: 'success',
+    })
+  } catch (err) {
+    target.value = !value // put the checkbox back
+    toast.add({
+      title: 'Could not update the report',
+      description: err instanceof Error ? err.message : undefined,
+      color: 'error',
+    })
+  } finally {
+    savingField.value = null
+  }
+}
 
 const { getFolderFiles } = useDrive()
 
@@ -224,7 +308,7 @@ async function exportPdf() {
     }
 
     // Status
-    const status = props.entry.dean_accepted ? 'Accepted by Dean' : props.entry.locked ? 'Locked' : 'Pending review'
+    const status = deanAccepted.value ? 'Accepted by Dean' : locked.value ? 'Locked' : 'Pending review'
     doc.setTextColor(140)
     writeCenteredLines(`Status: ${status}`, 9, 13)
     doc.setTextColor(0)

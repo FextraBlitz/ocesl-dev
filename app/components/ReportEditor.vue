@@ -155,40 +155,6 @@
           </p>
         </div>
 
-        <!-- DEAN ACCEPTANCE CONTROL -->
-        <div class="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 flex items-center justify-between gap-4">
-          <div class="flex items-start gap-3">
-            <UIcon name="i-lucide-shield-check" class="size-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-            <div class="space-y-0.5">
-              <p class="text-sm font-semibold text-amber-600 dark:text-amber-400">Dean Review</p>
-              <p class="text-xs text-neutral-500">Deans accept reports from their respective college.</p>
-            </div>
-          </div>
-          <UCheckbox
-            v-model="isDeanAccepted"
-            :disabled="!props.is_dean"
-            label="Accepted by Dean"
-            color="primary"
-            @change="onDeanAcceptToggle"
-          />
-        </div>
-
-        <!-- ADMIN STATUS OVERRIDE SECTION -->
-        <div v-if="isOceslAdmin" class="rounded-lg border border-default bg-elevated/40 p-4 flex items-center justify-between gap-4">
-          <div class="flex items-start gap-3">
-            <UIcon name="i-lucide-lock" class="size-5 text-muted mt-0.5 shrink-0" />
-            <div class="space-y-0.5">
-              <p class="text-sm font-semibold">Admin Controls</p>
-              <p class="text-xs text-neutral-500">Marking a report as complete prevents further edits by users.</p>
-            </div>
-          </div>
-          <UCheckbox
-            v-model="isCompleted"
-            label="Mark as Completed"
-            color="success"
-          />
-        </div>
-
         <USeparator />
 
         <div class="flex justify-between">
@@ -218,25 +184,12 @@ const { uploadThumbnail } = useReportThumbnail()
 const { user_data } = useUserData()
 const supabase_client = useSupabaseClient<Database>()
 
-const isOceslAdmin = computed(() => user_data.value?.authority === 'OCESL')
-
 const isSubmitting = ref(false)
 const selectedFiles = ref<File[]>([])
 const existingFiles = ref<Array<{ id: string; name: string; webViewLink: string }>>([])
 const folderDriveId = ref<string>(props.entry?.drive_link ?? '')
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const isDraggingFiles = ref(false)
-
-const isCompleted = ref<boolean>(props.entry?.locked ?? false)
-const isDeanAccepted = ref<boolean>(props.entry?.dean_accepted ?? false)
-
-watch(() => props.entry?.locked, (newStatus) => {
-  isCompleted.value = newStatus ?? false
-})
-
-watch(() => props.entry?.dean_accepted, (newVal) => {
-  isDeanAccepted.value = newVal ?? false
-})
 
 const state = reactive<Report>({
   name: props.entry?.name ?? '',
@@ -324,10 +277,6 @@ async function onDeleteFile(fileId: string) {
   }
 }
 
-async function onDeanAcceptToggle() {
-  return
-}
-
 const { submitReport, pending: submitPending } = useSubmitReport()
 const { updateReport, pending: updatePending } = useUpdateReport()
 
@@ -358,10 +307,12 @@ async function onSubmit(event: FormSubmitEvent<Report>) {
       outcomes: state.outcomes,
       remarks: state.remarks,
       drive_link: folderDriveId.value,
-      locked: isCompleted.value,
+      // Locking and Dean acceptance are changed from the viewer now; saving an
+      // edit just carries the current values through unchanged.
+      locked: props.entry?.locked ?? false,
       comment: props.entry?.comment,
       unit_id: props.entry?.unit_id ?? props.unit_id,
-      dean_accepted: isDeanAccepted.value,
+      dean_accepted: props.entry?.dean_accepted ?? false,
       type: props.entry?.type ?? props.report_type,
       // No new image selected: keep whatever thumbnail already exists (or
       // none). A new image is uploaded below and patched in afterward.

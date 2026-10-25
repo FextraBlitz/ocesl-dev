@@ -12,14 +12,6 @@
           <p v-if="entry.description" class="text-xs text-muted line-clamp-3">{{ entry.description }}</p>
           <p v-else class="text-xs italic text-muted">No description provided.</p>
         </div>
-        <div class="absolute top-2 right-2 flex gap-1">
-          <UBadge v-if="entry.dean_accepted" color="success" variant="solid" size="sm">
-            Completed
-          </UBadge>
-          <UBadge v-else-if="entry.locked" color="neutral" variant="solid" size="sm">
-            Locked
-          </UBadge>
-        </div>
       </div>
     </template>
 
@@ -42,14 +34,22 @@
     <template #footer>
       <div class="flex items-center justify-between text-xs text-muted">
         <span>{{ entry.date ? new Date(entry.date).toLocaleDateString() : 'No date' }}</span>
-        <UButton
-          variant="ghost"
-          color="primary"
-          size="xs"
-          :disabled="entry.dean_accepted"
-          :label="entry.locked ? 'View' : editLabel"
-          @click.stop="$emit('edit')"
-        />
+        <div class="flex items-center">
+          <UBadge v-if="entry.dean_accepted" color="success" variant="solid" size="sm">
+            Completed
+          </UBadge>
+          <UBadge v-else-if="entry.locked" color="neutral" variant="solid" size="sm">
+            Locked
+          </UBadge>
+          <UButton
+            variant="ghost"
+            color="primary"
+            size="xs"
+            :disabled="canEdit && !entry.locked && entry.dean_accepted"
+            :label="canEdit && entry.locked ? 'View' : editLabel"
+            @click.stop="opensViewer ? $emit('view') : $emit('edit')"
+          />
+        </div>
       </div>
     </template>
   </UCard>
@@ -64,9 +64,18 @@ const props = withDefaults(
     entry: Entry
     reportType: ReportTypes
     editLabel?: string
+    /**
+     * False for Deans and OCESL admins: they only review, so the button opens
+     * the viewer (where the accept / lock controls are) instead of the editor.
+     */
+    canEdit?: boolean
   }>(),
-  { editLabel: 'Edit' }
+  { editLabel: 'Edit', canEdit: true }
 )
+
+// Locked reports can't be edited by anyone, so for them (and for reviewers)
+// the button opens the viewer.
+const opensViewer = computed(() => !props.canEdit || props.entry.locked)
 
 defineEmits<{ edit: [], view: [] }>()
 

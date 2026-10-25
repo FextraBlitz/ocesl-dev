@@ -36,7 +36,7 @@
           variant="link"
           :items="unitsTabs"
           class="w-full"
-          @update:model-value="openSidebar = false"
+          @update:model-value="closeSidebarOnMobile"
         />
       </div>
     </USidebar>
@@ -130,6 +130,7 @@
             :entry="entry"
             :report-type="typeValue"
             edit-label="Review"
+            :can-edit="false"
             @edit="review(typeValue, entry)"
             @view="view(typeValue, entry)"
           />
@@ -198,6 +199,13 @@ const currentUnitEntries = computed(() => {
 useRefreshOnFocus([refresh_reports, userUnits.refresh, userManagements.refresh])
 
 const openSidebar = ref(true)
+
+// The sidebar is a slide-over drawer below md and a permanent column from md up.
+// Picking a unit should only close it in the drawer case; on desktop,
+// setting `open` to false would collapse the column to its icon rail.
+function closeSidebarOnMobile() {
+  if (window.matchMedia('(max-width: 767px)').matches) openSidebar.value = false
+}
 const toast = useToast()
 const overlay = useOverlay()
 
@@ -243,11 +251,13 @@ async function review(report_type: ReportTypes, entry?: Entry) {
   }
 }
 
-async function view(report_type: keyof typeof ReportCodeType, entry: Entry) {
-    view_modal.open({
-      report_type: report_type,
-      unit_name: userUnits.unit_info.value?.[currentTabId.value]?.name ?? '',
-      entry: entry,
-    })
-  }
+function view(report_type: keyof typeof ReportCodeType, entry: Entry) {
+  view_modal.open({
+    report_type: report_type,
+    unit_name: userUnits.unit_info.value?.[currentTabId.value]?.name ?? '',
+    entry: entry,
+    is_dean: isDean.value,                // shows the Dean Review control if this admin is also the unit's Dean
+    onChanged: () => refresh_reports(),   // refetch as soon as a checkbox saves
+  })
+}
 </script>

@@ -1,25 +1,26 @@
 import type { Database } from '#shared/types/database.types'
-import type { Entry, StrictInsert } from '~/utils/schemas'
-import { useUserManagements } from './useUserManagements'
+
+type ReportRow = Database['public']['Tables']['REPORT']['Row']
 
 export const useUpdateReport = () => {
   const client = useSupabaseClient<Database>()
 
-  // const inserted_data = ref<Database['public']['Tables']['REPORT']['Row']>()
   const error = ref<string | null>(null)
   const pending = ref(false)
-  
-  const updateReport = async (entryData: Database['public']['Tables']['REPORT']['Row']) => {
-    // const fullEntryData: Omit<Database['public']['Tables']['REPORT']['Insert'], 'id'> = {
-    //   ...entryData,
-    // }
+
+  // Accepts a full row (as the editor sends) OR just { id, ...changedColumns }
+  // (as the viewer's Dean / admin toggles send), so a toggle never overwrites
+  // other columns with stale data.
+  const updateReport = async (entryData: Partial<ReportRow> & Pick<ReportRow, 'id'>) => {
+    pending.value = true
+    error.value = null
     try {
       const { data, error: fetchError } = await client
-      .from('REPORT')
-      .update(entryData)
-      .eq('id', entryData.id)
-      .select()
-      .single();
+        .from('REPORT')
+        .update(entryData)
+        .eq('id', entryData.id)
+        .select()
+        .single()
 
       if (fetchError) throw new Error(fetchError.message)
       return data
@@ -31,5 +32,5 @@ export const useUpdateReport = () => {
     }
   }
 
-  return { updateReport, pending, error, status }
+  return { updateReport, pending, error }
 }
