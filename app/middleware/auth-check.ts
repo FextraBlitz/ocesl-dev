@@ -1,24 +1,26 @@
 import type { Database } from '#shared/types/database.types'
 
-// Routes that require STAFF.authority === 'OCESL'.
-const adminPages = ['/dashboard/admin', '/manage']
+// Routes that require STAFF.authority === 'OCESL'. These must match the real
+// routes (pages/manage.vue and pages/dashboard/admin.vue). A path that is not
+// listed here is open to any signed-in user.
+const adminPages = ['/manage', '/dashboard/admin']
 
-export default defineNuxtRouteMiddleware(async (to, from) => {
+export default defineNuxtRouteMiddleware(async (to) => {
   const client = useSupabaseClient<Database>()
   const user = useSupabaseUser()
-  const router = useRouter()
 
-
-  // 1. Check if user is logged into Supabase Auth
+  // 1. Signed in at all?
   if (!user.value) {
     return navigateTo('/login')
   }
 
-  // 2. Query your specific table for the required value.
-  // STAFF has no auth-user-id column — every profile lookup in this app
-  // resolves by email (see useUserData), so this needs to match that.
+  // 2. Not an admin page: being signed in is enough.
+  const isAdminPage = adminPages.some((p) => to.path === p || to.path.startsWith(`${p}/`))
+  if (!isAdminPage) return
+
+  // 3. Admin page: look the person up by email (STAFF has no auth-user-id column).
   if (!user.value.email) {
-    return router.back()
+    return navigateTo('/dashboard')
   }
 
   const { data, error } = await client
@@ -27,14 +29,8 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     .eq('email', user.value.email)
     .single()
 
-  // 3. Handle errors or missing records
-  if (error || !data) {
-    return router.back() //navigateTo('/unauthorized')
-  }
-
-  // 4. Validate the specific column value
-  const requiredValue = 'OCESL' // Replace with your expected value
-  if (adminPages.includes(to.path) && data.authority !== requiredValue) {
-    return router.back() //navigateTo('/forbidden')
+  // 4. No profile, or not an OCESL administrator: send them to their own dashboard.
+  if (error || !data || data.authority !== 'OCESL') {
+    return navigateTo('/dashboard')
   }
 })
